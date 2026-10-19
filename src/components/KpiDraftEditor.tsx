@@ -13,7 +13,7 @@ export function KpiDraftEditor({ drafts, onChange }: { drafts: KpiDraft[]; onCha
     <div className="space-y-3">
       <AnimatePresence initial={false}>
         {drafts.map((d, i) => (
-          <motion.div key={i} layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0, marginTop: 0 }}
+          <motion.div key={i} layout initial={{ y: 8 }} animate={{ y: 0 }} exit={{ opacity: 0, height: 0, marginTop: 0 }}
             className="card overflow-hidden">
             <div className="flex">
               <span className="w-1.5 shrink-0" style={{ background: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />

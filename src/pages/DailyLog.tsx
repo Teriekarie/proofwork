@@ -156,7 +156,7 @@ export default function DailyLog() {
           {/* Review drafts */}
           <AnimatePresence>
             {drafts && drafts.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}>
+              <motion.div initial={{ y: 10 }} animate={{ y: 0 }} exit={{ opacity: 0, y: 10 }}>
                 <Card className="border-teal-200 p-5 dark:border-teal-500/30">
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <div>

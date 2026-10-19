@@ -15,7 +15,7 @@ function AuthLayout({ title, subtitle, children, footer }: { title: string; subt
       <div className="flex flex-col px-5 py-6 sm:px-10">
         <Link to="/"><Logo /></Link>
         <div className="flex flex-1 items-center justify-center py-10">
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-sm">
+          <motion.div initial={{ y: 12 }} animate={{ y: 0 }} className="w-full max-w-sm">
             <h1 className="text-3xl font-bold">{title}</h1>
             <p className="mt-2 text-muted">{subtitle}</p>
             <div className="mt-8">{children}</div>

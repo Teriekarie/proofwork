@@ -89,7 +89,7 @@ export default function Planner() {
                   {[...open, ...done].map((t) => {
                     const c = t.category_id ? catById.get(t.category_id) : undefined
                     return (
-                      <motion.li key={t.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }}
+                      <motion.li key={t.id} layout initial={false} exit={{ opacity: 0, height: 0 }}
                         className="group flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-canvas">
                         <button onClick={() => toggle(t)} aria-label={t.done_at ? 'Mark not done' : 'Mark done'}
                           className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition', t.done_at ? 'border-teal-500 bg-teal-500 text-white' : 'border-line hover:border-teal-400')}>

@@ -74,6 +74,10 @@ export const supabaseAuth: AuthRepo = {
     }
   },
   async signInWithOAuth(provider) {
+    // Supabase shows a raw error page for providers that aren't enabled, so check first.
+    const enabled = String(import.meta.env.VITE_OAUTH_PROVIDERS ?? '').split(',').map((s) => s.trim())
+    if (!enabled.includes(provider))
+      throw new RepoError(`${provider === 'azure' ? 'Microsoft' : 'Google'} sign-in is coming soon. Please use email for now.`, 'provider_disabled')
     const { error } = await sb().auth.signInWithOAuth({
       provider,
       options: { redirectTo: `${origin()}/home`, scopes: provider === 'azure' ? 'email openid profile' : undefined },

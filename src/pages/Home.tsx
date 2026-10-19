@@ -41,7 +41,7 @@ export default function HomePage() {
 
   return (
     <div>
-      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+      <motion.div initial={{ y: 8 }} animate={{ y: 0 }}
         className="relative overflow-hidden rounded-3xl bg-navy-600 px-6 py-7 text-white sm:px-8 sm:py-9">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(29,158,117,0.55),transparent_55%)]" />
         <div className="relative flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
@@ -108,7 +108,7 @@ export default function HomePage() {
         <p className="mt-1 text-muted">Log daily. The rest builds itself.</p>
         <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {SECTIONS.map((s, i) => (
-            <motion.div key={s.to} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 * i }}>
+            <motion.div key={s.to} initial={{ y: 10 }} animate={{ y: 0 }} transition={{ delay: 0.04 * i }}>
               <Link to={s.to} className="card group flex h-full flex-col p-5 transition hover:-translate-y-0.5 hover:shadow-lift">
                 <span className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${s.color} text-white`}><s.icon className="h-5 w-5" /></span>
                 <h3 className="mt-4 font-semibold">{s.title}</h3>

@@ -116,7 +116,7 @@ function KpiCard({ cat, metrics, entries, total, allEntries, today, period, inde
   const above = entries.filter((e) => e.entry_type === 'above_beyond').length
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.04 }}>
+    <motion.div initial={{ y: 10 }} animate={{ y: 0 }} transition={{ delay: index * 0.04 }}>
       <Link to={`/history?category=${cat.id}`} className="card block h-full overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lift">
         <div className="h-1" style={{ background: cat.color }} />
         <div className="p-5">

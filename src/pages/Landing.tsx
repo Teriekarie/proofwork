@@ -6,7 +6,7 @@ import {
 import { Logo } from '@/components/Logo'
 import { Button, CategoryChip, TypeBadge } from '@/components/ui'
 
-const fade = { initial: { opacity: 0, y: 16 }, whileInView: { opacity: 1, y: 0 }, viewport: { once: true, margin: '-60px' }, transition: { duration: 0.5 } }
+const fade = { initial: { y: 16 }, whileInView: { y: 0 }, viewport: { once: true, margin: '-60px' }, transition: { duration: 0.5 } }
 
 export default function Landing() {
   return (
@@ -27,7 +27,7 @@ export default function Landing() {
       <section className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 -z-0 bg-[radial-gradient(ellipse_70%_60%_at_70%_0%,rgba(29,158,117,0.14),transparent_70%),radial-gradient(ellipse_60%_50%_at_10%_10%,rgba(26,60,94,0.12),transparent_70%)]" />
         <div className="relative mx-auto grid max-w-6xl items-center gap-12 px-4 pb-16 pt-14 sm:px-6 md:grid-cols-2 md:pb-24 md:pt-20">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <motion.div initial={{ y: 20 }} animate={{ y: 0 }} transition={{ duration: 0.6 }}>
             <span className="chip mb-5 border border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-500/30 dark:bg-teal-500/10 dark:text-teal-300">
               <Sparkles className="h-3.5 w-3.5" /> AI-powered work log
             </span>
@@ -45,7 +45,7 @@ export default function Landing() {
           </motion.div>
 
           {/* Product preview */}
-          <motion.div initial={{ opacity: 0, y: 30, rotate: 1 }} animate={{ opacity: 1, y: 0, rotate: 0 }} transition={{ duration: 0.7, delay: 0.15 }} className="relative">
+          <motion.div initial={{ y: 30, rotate: 1 }} animate={{ y: 0, rotate: 0 }} transition={{ duration: 0.7, delay: 0.15 }} className="relative">
             <div className="card p-5 shadow-lift">
               <p className="text-xs font-semibold uppercase tracking-wider text-muted">Today's brain-dump</p>
               <p className="mt-2 rounded-xl bg-canvas p-3.5 text-[15px] leading-relaxed text-ink">
@@ -58,7 +58,7 @@ export default function Landing() {
                   { t: 'Held a design review call with HR on the intranet page', c: 'Stakeholder Engagement', col: '#C97A16', type: 'normal' as const },
                   { t: 'Stayed late to fix the Q3 dashboard for leadership', c: 'Data Analysis & Reporting', col: '#3B73D9', type: 'above_beyond' as const },
                 ].map((e, i) => (
-                  <motion.div key={e.t} initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.6 + i * 0.15 }}
+                  <motion.div key={e.t} initial={{ x: 12 }} animate={{ x: 0 }} transition={{ delay: 0.6 + i * 0.15 }}
                     className="rounded-xl border border-line/70 bg-surface p-3">
                     <p className="text-sm font-medium">{e.t}</p>
                     <div className="mt-2 flex flex-wrap gap-1.5"><CategoryChip name={e.c} color={e.col} />{e.type !== 'normal' && <TypeBadge type={e.type} />}</div>

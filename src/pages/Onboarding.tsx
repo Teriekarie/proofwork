@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { ArrowLeft, ArrowRight, Briefcase, Check, FileText, Sparkles, Target, UserRound } from 'lucide-react'
 import { Logo } from '@/components/Logo'
 import { Button, Card, CategoryChip } from '@/components/ui'
@@ -38,6 +38,13 @@ export default function Onboarding() {
   const [aiSource, setAiSource] = useState<'claude' | 'offline' | null>(null)
   const [saving, setSaving] = useState(false)
   const uState = useUsernameCheck(p.username)
+
+  // Resuming after a refresh: bring back the JD saved earlier in onboarding.
+  useEffect(() => {
+    data.getCurrentJd().then((j) => {
+      if (j) { setJd((cur) => cur || j.jd_text); setJdFile((cur) => cur ?? j.file_name) }
+    }).catch(() => {})
+  }, [])
 
   const patch = (x: Partial<ProfileDraft>) => setP((s) => ({ ...s, ...x }))
 
@@ -111,8 +118,8 @@ export default function Onboarding() {
         </div>
         <p className="-mt-3 mb-6 text-muted">{S.blurb}</p>
 
-        <AnimatePresence mode="wait" custom={dir}>
-          <motion.div key={step} custom={dir} initial={{ opacity: 0, x: 24 * dir }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -24 * dir }} transition={{ duration: 0.22 }}>
+        {/* Enter-only slide (no opacity/exit phase) so a step can never be left invisible mid-animation. */}
+          <motion.div key={step} initial={{ x: 24 * dir }} animate={{ x: 0 }} transition={{ duration: 0.22 }}>
             {step === 0 && <Card className="p-5 sm:p-7"><AboutFields value={p} onChange={patch} /></Card>}
             {step === 1 && <Card className="p-5 sm:p-7"><WorkFields value={p} onChange={patch} /></Card>}
             {step === 2 && (
@@ -151,7 +158,6 @@ export default function Onboarding() {
               )
             )}
           </motion.div>
-        </AnimatePresence>
 
         <div className="mt-8 flex items-center justify-between gap-3">
           <Button variant="ghost" onClick={() => go(step - 1)} disabled={step === 0} icon={<ArrowLeft className="h-4 w-4" />}>Back</Button>
