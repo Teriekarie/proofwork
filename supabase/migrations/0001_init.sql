@@ -1,8 +1,8 @@
 -- Proofwork schema. Every table is protected by Row Level Security so a user
 -- can only read and write their own rows. Run this once in the Supabase SQL editor
--- (or with `supabase db push`).
+-- (or with `supabase db push`). Applied to project "proofwork" on 2026-10-19.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- ---------------------------------------------------------------- tables
 
@@ -135,7 +135,7 @@ create table public.report_shares (
   id uuid primary key default gen_random_uuid(),
   report_id uuid not null references public.reports (id) on delete cascade,
   user_id uuid not null references auth.users (id) on delete cascade default auth.uid(),
-  token text not null unique default encode(gen_random_bytes(18), 'hex'),
+  token text not null unique default encode(extensions.gen_random_bytes(18), 'hex'),
   expires_at timestamptz,
   revoked_at timestamptz,
   created_at timestamptz not null default now()
@@ -144,20 +144,22 @@ create table public.report_shares (
 -- ---------------------------------------------------------------- row level security
 
 alter table public.profiles enable row level security;
-create policy "own profile" on public.profiles for all using (id = auth.uid()) with check (id = auth.uid());
+-- (select auth.uid()) is evaluated once per query instead of once per row.
+create policy "own profile" on public.profiles for all to authenticated
+  using (id = (select auth.uid())) with check (id = (select auth.uid()));
 
 do $$
 declare t text;
 begin
   foreach t in array array['job_descriptions', 'kpi_categories', 'kpi_metrics', 'daily_logs', 'entries', 'tasks', 'standups', 'reports', 'report_shares'] loop
     execute format('alter table public.%I enable row level security', t);
-    execute format('create policy "own rows" on public.%I for all using (user_id = auth.uid()) with check (user_id = auth.uid())', t);
+    execute format('create policy "own rows" on public.%I for all to authenticated using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()))', t);
   end loop;
 end $$;
 
 -- A share can only point at one of your own reports.
-create policy "share own reports only" on public.report_shares as restrictive for insert
-  with check (exists (select 1 from public.reports r where r.id = report_id and r.user_id = auth.uid()));
+create policy "share own reports only" on public.report_shares as restrictive for insert to authenticated
+  with check (exists (select 1 from public.reports r where r.id = report_id and r.user_id = (select auth.uid())));
 
 -- ---------------------------------------------------------------- new users
 
@@ -177,6 +179,7 @@ end $$;
 
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
+revoke execute on function public.handle_new_user() from public, anon, authenticated;
 
 -- ---------------------------------------------------------------- logging window
 -- Today is open; the previous work day is open (late entries); older days are locked; no future dates.
@@ -196,6 +199,9 @@ begin
   end loop;
   if d < prev then raise exception 'PW_LOCKED_DATE'; end if;
 end $$;
+-- Called from the entry/log triggers on behalf of signed-in users only.
+revoke execute on function public.pw_assert_log_date(uuid, date) from public, anon;
+grant execute on function public.pw_assert_log_date(uuid, date) to authenticated;
 
 create or replace function public.pw_entries_window() returns trigger
 language plpgsql as $$
@@ -254,6 +260,7 @@ begin
     i := i + 1;
   end loop;
 end $$;
+revoke execute on function public.apply_kpi_drafts(jsonb) from public, anon;
 grant execute on function public.apply_kpi_drafts(jsonb) to authenticated;
 
 -- Public read of a single shared report by token (only the report + owner's name/title).
@@ -283,6 +290,7 @@ begin
   alter table public.entries enable trigger entries_window;
   delete from auth.users where id = auth.uid();
 end $$;
+revoke execute on function public.delete_my_account() from public, anon;
 grant execute on function public.delete_my_account() to authenticated;
 
 -- ---------------------------------------------------------------- storage (avatars)
