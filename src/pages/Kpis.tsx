@@ -59,7 +59,9 @@ export default function Kpis() {
     try {
       const jd = await data.getCurrentJd()
       if (!jd) { toast('Add your job description in Profile first.', 'info'); return }
-      setRegen((await generateKpis(jd.jd_text, profile?.job_title ?? '')).value)
+      const r = await generateKpis(jd.jd_text, profile?.job_title ?? '')
+      if (r.reason) toast(`Claude couldn't generate KPIs (${r.reason}). Showing basic suggestions instead.`, 'error')
+      setRegen(r.value)
     } finally { setRegenBusy(false) }
   }
   const applyRegen = async () => {

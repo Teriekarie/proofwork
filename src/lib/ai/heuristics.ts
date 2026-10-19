@@ -72,7 +72,9 @@ const TENSE: [RegExp, string][] = [
 ]
 
 export function splitItems(raw: string): string[] {
-  const lines = raw.split(/\r?\n|;|•|(?:^|\s)[-*]\s+|\d+[.)]\s+/).map((s) => s.trim()).filter(Boolean)
+  const lines = raw.split(/\r?\n|;|•/)
+    .map((s) => s.trim().replace(/^([-*–]|\d+[.)])\s*/, '').trim())
+    .filter(Boolean)
   const out: string[] = []
   for (const line of lines) {
     for (const sentence of line.split(/(?<=[.!?])\s+(?=[A-Z])/)) {

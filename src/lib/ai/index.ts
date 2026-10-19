@@ -8,28 +8,37 @@ import { isDemo } from '../repo'
 import { getSupabase } from '../repo/supabase'
 import { heuristicKpis, heuristicOrganise } from './heuristics'
 
-export interface AiResult<T> { value: T; source: 'claude' | 'offline' }
+/** `reason` explains why the offline fallback was used, so the UI can say so. */
+export interface AiResult<T> { value: T; source: 'claude' | 'offline'; reason?: string }
 
 async function callAi<T>(task: string, payload: Record<string, unknown>): Promise<T> {
   const { data, error } = await getSupabase().functions.invoke('ai', { body: { task, ...payload } })
-  if (error) throw error
+  if (error) {
+    // Surface the function's own error message (e.g. missing API key) rather than a generic HTTP error.
+    const ctx = (error as { context?: Response }).context
+    const msg = ctx && typeof ctx.json === 'function' ? await ctx.json().then((b: { error?: string }) => b?.error).catch(() => null) : null
+    throw new Error(msg || error.message)
+  }
   if (data?.error) throw new Error(data.error)
   return data.result as T
 }
+const why = (e: unknown) => (e instanceof Error ? e.message : 'AI unavailable')
 
 const pause = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 export async function generateKpis(jdText: string, jobTitle: string): Promise<AiResult<KpiDraft[]>> {
+  let reason: string | undefined
   if (!isDemo) {
     try {
       const value = await callAi<KpiDraft[]>('generate_kpis', { jd_text: jdText, job_title: jobTitle })
       if (Array.isArray(value) && value.length) return { value, source: 'claude' }
-    } catch (e) { console.warn('AI generate_kpis failed, using offline fallback', e) }
+    } catch (e) { reason = why(e); console.warn('AI generate_kpis failed, using offline fallback', e) }
   } else await pause(900)
-  return { value: heuristicKpis(`${jobTitle}\n${jdText}`), source: 'offline' }
+  return { value: heuristicKpis(`${jobTitle}\n${jdText}`), source: 'offline', reason }
 }
 
 export async function organiseLog(raw: string, categories: KpiCategory[], metrics: KpiMetric[]): Promise<AiResult<EntryDraft[]>> {
+  let reason: string | undefined
   if (!isDemo) {
     try {
       const value = await callAi<EntryDraft[]>('organise_log', {
@@ -38,9 +47,9 @@ export async function organiseLog(raw: string, categories: KpiCategory[], metric
         metrics: metrics.map((m) => ({ id: m.id, category_id: m.category_id, name: m.name, unit: m.unit })),
       })
       if (Array.isArray(value)) return { value: sanitiseDrafts(value, categories, metrics), source: 'claude' }
-    } catch (e) { console.warn('AI organise_log failed, using offline fallback', e) }
+    } catch (e) { reason = why(e); console.warn('AI organise_log failed, using offline fallback', e) }
   } else await pause(700)
-  return { value: heuristicOrganise(raw, categories, metrics), source: 'offline' }
+  return { value: heuristicOrganise(raw, categories, metrics), source: 'offline', reason }
 }
 
 export async function polishReport(content: ReportContent, ctx: { name: string; jobTitle: string; periodLabel: string }): Promise<AiResult<ReportContent>> {

@@ -72,6 +72,7 @@ export default function Onboarding() {
       await data.saveJd({ source: jdFile ? 'upload' : 'paste', file_name: jdFile, jd_text: jd.trim() })
       const r = await generateKpis(jd, p.job_title)
       setDrafts(r.value); setAiSource(r.source)
+      if (r.reason) toast(`Claude couldn't generate KPIs (${r.reason}). Showing basic suggestions instead.`, 'error')
     } catch (e) { toast((e as Error).message, 'error') } finally { setGenerating(false) }
   }
 

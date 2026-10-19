@@ -55,6 +55,7 @@ export default function DailyLog() {
       const r = await organiseLog(raw, categories, metrics)
       setDrafts((d) => [...(d ?? []), ...r.value])
       setAiSource(r.source)
+      if (r.reason) toast(`Claude couldn't organise this (${r.reason}). Used the basic offline organiser instead.`, 'error')
       if (!r.value.length) toast("Couldn't find any work items in that. Try one item per line.", 'info')
     } finally { setBusy(false) }
   }
@@ -161,7 +162,7 @@ export default function DailyLog() {
                   <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <h2 className="section-title flex items-center gap-2"><Sparkles className="h-4 w-4 text-teal-500" />Review {pluralize(drafts.length, 'entry', 'entries')}</h2>
-                      <p className="text-sm text-muted">Check the wording and KPI for each one, then save.{aiSource === 'offline' && ' (Offline organiser. Claude is used once connected.)'}</p>
+                      <p className="text-sm text-muted">Check the wording and KPI for each one, then save.{aiSource === 'offline' && ' (Basic offline organiser. Claude wasn\'t available for this one.)'}{aiSource === 'claude' && ' Organised by Claude.'}</p>
                     </div>
                   </div>
                   <div className="space-y-3">
