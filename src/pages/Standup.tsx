@@ -27,7 +27,8 @@ export default function StandupPage() {
   const [present, setPresent] = useState(false)
   const [viewing, setViewing] = useState<Standup | null>(null)
 
-  const generate = async () => {
+  /** Rebuilds from the log and planner. The AI polish only runs when that input changed, or when forced. */
+  const generate = async (force = false) => {
     setBusy(true)
     try {
       const [yEntries, tasks, recent] = await Promise.all([
@@ -43,8 +44,13 @@ export default function StandupPage() {
         inProgress: [...lastByText.values()].filter((e) => e.status === 'in_progress' && e.entry_date < today),
         recentBlockers: recent.filter((e) => e.entry_type === 'blocker' && e.entry_date >= shiftDays(today, -3)),
       })
+      const source_hash = JSON.stringify(built)
+      if (!force && saved && saved.source_hash === source_hash) {
+        setParts({ yesterday: saved.yesterday, today: saved.today, blockers: saved.blockers })
+        return
+      }
       const polished = await polishStandup(built)
-      const s = await data.saveStandup({ standup_date: today, ...polished.value, generated_at: new Date().toISOString(), edited: false })
+      const s = await data.saveStandup({ standup_date: today, ...polished.value, generated_at: new Date().toISOString(), edited: false, source_hash })
       setParts({ yesterday: s.yesterday, today: s.today, blockers: s.blockers })
     } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
   }
@@ -61,7 +67,7 @@ export default function StandupPage() {
     if (!parts) return
     const clean = (xs: string[]) => xs.map((x) => x.trim()).filter(Boolean)
     const next = { yesterday: clean(parts.yesterday), today: clean(parts.today), blockers: clean(parts.blockers) }
-    await data.saveStandup({ standup_date: today, ...next, generated_at: saved?.generated_at ?? new Date().toISOString(), edited: true })
+    await data.saveStandup({ standup_date: today, ...next, generated_at: saved?.generated_at ?? new Date().toISOString(), edited: true, source_hash: saved?.source_hash ?? '' })
     setParts(next)
     setEditing(false); toast('Standup saved')
   }
@@ -78,7 +84,7 @@ export default function StandupPage() {
     <div>
       <PageHeader title="Standup" subtitle={`For ${longDate(today)} · covering ${prettyDate(prev, 'EEEE d MMM')}`}
         actions={<>
-          <Button variant="outline" size="sm" icon={<RefreshCw className="h-4 w-4" />} loading={busy} onClick={generate}>Regenerate</Button>
+          <Button variant="outline" size="sm" icon={<RefreshCw className="h-4 w-4" />} loading={busy} onClick={() => generate(true)}>Regenerate</Button>
           <Button variant="outline" size="sm" icon={<Pencil className="h-4 w-4" />} onClick={() => (editing ? saveEdits() : setEditing(true))}>{editing ? 'Save' : 'Edit'}</Button>
           <Button variant="outline" size="sm" icon={<Copy className="h-4 w-4" />} onClick={() => copy(parts, today)}>Copy</Button>
           <Button variant="accent" size="sm" icon={<Maximize2 className="h-4 w-4" />} onClick={() => setPresent(true)}>Read-out mode</Button>

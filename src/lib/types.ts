@@ -112,6 +112,8 @@ export interface Standup {
   generated_at: string
   /** True once the user has edited it by hand; edited standups are not auto-regenerated. */
   edited: boolean
+  /** Fingerprint of the entries/tasks it was built from; unchanged input means no new AI call. */
+  source_hash: string
 }
 
 export interface ReportSection {
