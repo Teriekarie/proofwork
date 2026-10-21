@@ -2,6 +2,10 @@
 
 *Every day, on the record.* Log your daily work in plain words; Proofwork maps it to your KPIs, writes your standup, and builds weekly / monthly / quarterly / yearly reports. Full product spec: [SPEC.md](SPEC.md).
 
+**Live:** https://proofwork-xi.vercel.app · Hosting: Vercel (auto-deploys every push to `main`) · Backend: Supabase project `proofwork`.
+
+> Vercel's Hobby plan only deploys commits authored by the account owner, so commits must use the GitHub/Vercel account email (`git config user.email`).
+
 ## Run it locally
 
 Node.js and Git are installed portably in `%USERPROFILE%\tools` (on your user PATH, so open a new terminal after setup).
