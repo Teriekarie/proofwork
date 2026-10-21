@@ -32,11 +32,18 @@ export default function Planner() {
   const catById = useMemo(() => new Map((categories ?? []).map((c) => [c.id, c])), [categories])
   const carry = (older ?? []).filter((t) => !t.done_at)
 
+  const [adding, setAdding] = useState(false)
   const add = async (e: FormEvent) => {
     e.preventDefault()
-    if (!title.trim()) return
-    await data.saveTask({ title: title.trim(), task_date: date, category_id: cat || null })
-    setTitle('')
+    const t = title.trim()
+    // Guard against double submits (Enter + click, or a fast double press).
+    if (!t || adding) return
+    if ((tasks ?? []).some((x) => x.title.toLowerCase() === t.toLowerCase())) { toast('That task is already on the list.', 'info'); return }
+    setAdding(true)
+    try {
+      await data.saveTask({ title: t, task_date: date, category_id: cat || null })
+      setTitle('')
+    } finally { setAdding(false) }
   }
 
   const toggle = async (t: Task) => {
@@ -76,7 +83,7 @@ export default function Planner() {
                 <option value="">No KPI</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </Select>
-              <Button type="submit" icon={<Plus className="h-4 w-4" />} disabled={!title.trim()}>Add</Button>
+              <Button type="submit" icon={<Plus className="h-4 w-4" />} disabled={!title.trim()} loading={adding}>Add</Button>
             </form>
           </Card>
 

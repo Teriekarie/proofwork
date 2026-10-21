@@ -50,7 +50,15 @@ export default function Insights() {
       <PageHeader title="Insights" subtitle="Patterns in your work, compared with your own baseline, never anyone else's." />
 
       <div className="grid gap-3 md:grid-cols-2">
-        {insights.length === 0 && <Card className="p-5 md:col-span-2"><p className="text-muted">No flags right now. Your KPIs are balanced and your logging is steady.</p></Card>}
+        {insights.length === 0 && (
+          <Card className="p-5 md:col-span-2">
+            <p className="text-muted">
+              {entries.map((e) => e.entry_date).sort()[0] > shiftDays(today, -13)
+                ? 'Quiet-KPI and light-week flags start after two weeks of logging, once there\'s a baseline to compare against.'
+                : 'No flags right now. Your KPIs are balanced and your logging is steady.'}
+            </p>
+          </Card>
+        )}
         {insights.map((i, k) => (
           <Card key={k} className={cn('flex gap-3 p-5', i.tone === 'warn' && 'border-amber-200 dark:border-amber-500/30', i.tone === 'good' && 'border-teal-200 dark:border-teal-500/30')}>
             <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl',

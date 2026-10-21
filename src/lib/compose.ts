@@ -154,10 +154,14 @@ export function weeklyCounts(entries: Entry[], today: LogDate, weeks = 8): { wee
 export function computeInsights(opts: { entries: Entry[]; logs: DailyLog[]; categories: KpiCategory[]; today: LogDate; workDays: number[] }): Insight[] {
   const { entries, categories, today } = opts
   const out: Insight[] = []
+  // Only judge "quiet" KPIs once there's at least two weeks of history to judge against.
+  const first = entries.map((e) => e.entry_date).sort()[0]
+  const historyDays = first ? daysBetween(first, today).length : 0
   for (const c of categories.filter((c) => !c.is_extra)) {
+    if (historyDays < 14) break
     const last = entries.filter((e) => e.category_id === c.id).map((e) => e.entry_date).sort().pop()
     const since = last ? daysBetween(last, today).length - 1 : null
-    if (since === null && entries.length >= 5) out.push({ kind: 'neglected', tone: 'warn', title: `No activity yet in ${c.name}`, detail: 'Nothing has been logged against this KPI so far.' })
+    if (since === null) out.push({ kind: 'neglected', tone: 'warn', title: `No activity yet in ${c.name}`, detail: 'Nothing has been logged against this KPI so far.' })
     else if (since !== null && since >= 14) out.push({ kind: 'neglected', tone: 'warn', title: `${c.name} has been quiet for ${since} days`, detail: `Last entry ${prettyDate(last!)}. Worth planning something here.` })
   }
   const weeks = weeklyCounts(entries, today, 9)
