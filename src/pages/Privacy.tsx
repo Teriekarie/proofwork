@@ -50,7 +50,7 @@ export default function Privacy() {
         </Section>
 
         <Section title="Where your data lives">
-          <p>The database and sign-in are hosted by <b>Supabase</b> in the EU (London region), encrypted in transit and at rest. The website is served by <b>Vercel</b>. Encrypted backups are kept for up to 90 days.</p>
+          <p>The database and sign-in are hosted by <b>Supabase</b> in the EU (Ireland region), encrypted in transit and at rest. The website is served by <b>Vercel</b>. Encrypted backups are kept for up to 90 days.</p>
         </Section>
 
         <Section title="Your controls">
