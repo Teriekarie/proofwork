@@ -1,6 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  // relative: resolve these paths from this file, not from wherever the dev server was started.
+  content: { relative: true, files: ['./index.html', './src/**/*.{ts,tsx}'] },
   darkMode: 'class',
   theme: {
     extend: {
