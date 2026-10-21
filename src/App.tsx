@@ -17,6 +17,7 @@ import Kpis from './pages/Kpis'
 import Insights from './pages/Insights'
 import ProfilePage from './pages/Profile'
 import SharedReport from './pages/SharedReport'
+import Privacy from './pages/Privacy'
 
 function RequireAuth({ children, onboarding }: { children: ReactNode; onboarding?: boolean }) {
   const { ready, session, profile } = useSession()
@@ -44,6 +45,7 @@ export default function App() {
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/share/:token" element={<SharedReport />} />
+      <Route path="/privacy" element={<Privacy />} />
       <Route path="/onboarding" element={<RequireAuth onboarding><Onboarding /></RequireAuth>} />
       <Route element={<RequireAuth><AppShell /></RequireAuth>}>
         <Route path="/home" element={<HomePage />} />

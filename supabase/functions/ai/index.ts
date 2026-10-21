@@ -156,6 +156,8 @@ Write:
 // ---------------------------------------------------------------- handler
 
 const LIMITS = { jd: 40_000, raw: 8_000, json: 60_000 }
+// AI calls allowed per person per day (UTC). Override with the AI_DAILY_LIMIT secret.
+const DAILY_LIMIT = Number(Deno.env.get('AI_DAILY_LIMIT') ?? 40) || 40
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: cors })
@@ -171,6 +173,12 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json()
+    const quota = await supa.rpc('consume_ai_quota', { daily_limit: DAILY_LIMIT })
+    if (quota.error) {
+      if (quota.error.message.includes('PW_AI_LIMIT'))
+        return json({ error: `You've used today's ${DAILY_LIMIT} AI actions. They reset at midnight UTC; you can still log and edit manually.` }, 429)
+      throw new Error(quota.error.message)
+    }
     switch (body.task) {
       case 'generate_kpis':
         if (typeof body.jd_text !== 'string' || body.jd_text.length > LIMITS.jd) return json({ error: 'Job description is missing or too long.' }, 400)

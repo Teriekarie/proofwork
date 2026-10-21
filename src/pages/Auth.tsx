@@ -21,6 +21,7 @@ function AuthLayout({ title, subtitle, children, footer }: { title: string; subt
             <p className="mt-2 text-muted">{subtitle}</p>
             <div className="mt-8">{children}</div>
             {footer && <div className="mt-6 text-center text-sm text-muted">{footer}</div>}
+            <p className="mt-8 text-center text-xs text-muted"><Link to="/privacy" className="hover:text-ink hover:underline">Privacy & data</Link></p>
           </motion.div>
         </div>
       </div>
@@ -160,7 +161,7 @@ export function Signup() {
         </Field>
         <label className="flex items-start gap-2.5 text-sm text-muted">
           <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 h-4 w-4 rounded accent-teal-500" />
-          <span>I understand my work log is stored securely and processed by AI to categorise entries and write reports.</span>
+          <span>I've read the <Link to="/privacy" target="_blank" className="font-medium text-teal-600 hover:underline">privacy & data page</Link>. My log is stored securely and processed by AI when I use AI features.</span>
         </label>
         {error && <p className="rounded-xl bg-red-50 px-3.5 py-2.5 text-sm text-red-700 dark:bg-red-500/10 dark:text-red-300">{error}</p>}
         <Button type="submit" variant="accent" size="lg" className="w-full" loading={busy}>Create account</Button>

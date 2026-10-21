@@ -134,7 +134,7 @@ export default function Landing() {
       <footer className="border-t border-line/60 py-8">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-4 text-sm text-muted sm:flex-row sm:px-6">
           <Logo />
-          <p>© {new Date().getFullYear()} Proofwork. Every day, on the record.</p>
+          <p>© {new Date().getFullYear()} Proofwork. Every day, on the record. · <Link to="/privacy" className="hover:text-ink hover:underline">Privacy & data</Link></p>
         </div>
       </footer>
     </div>

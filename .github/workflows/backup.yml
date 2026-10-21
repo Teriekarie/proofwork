@@ -1,0 +1,59 @@
+# Weekly encrypted backup of the Proofwork database.
+# Needs two repository secrets (Settings → Secrets and variables → Actions):
+#   SUPABASE_DB_URL     – Supabase "Session pooler" connection string, with the database password filled in
+#   BACKUP_PASSPHRASE   – a long passphrase used to encrypt the backup (keep it in your password manager)
+# Restore: download the artifact, then
+#   gpg --decrypt proofwork-YYYY-MM-DD.sql.gz.gpg | gunzip | psql "<connection string>"
+name: Weekly database backup
+
+on:
+  schedule:
+    - cron: '0 2 * * 0' # Sundays 02:00 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check secrets are set
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB" ] || [ -z "$PASS" ]; then
+            echo "::error::Add the SUPABASE_DB_URL and BACKUP_PASSPHRASE repository secrets first."
+            exit 1
+          fi
+
+      - name: Install PostgreSQL 17 client
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: Dump, compress and encrypt
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -o pipefail
+          FILE="proofwork-$(date -u +%F).sql.gz.gpg"
+          /usr/lib/postgresql/17/bin/pg_dump "$DB" --no-owner --no-privileges --schema=public --schema=auth --schema=private \
+            | gzip -9 \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$PASS" -o "$FILE"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          ls -lh "$FILE"
+
+      - name: Keep encrypted backup for 90 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILE }}
+          path: ${{ env.FILE }}
+          retention-days: 90
+          if-no-files-found: error
