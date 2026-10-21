@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { Check, Eye, EyeOff, MailCheck, X } from 'lucide-react'
 import { Logo } from '@/components/Logo'
+import { AuthShowcase } from '@/components/AuthShowcase'
 import { Button, Field, Input } from '@/components/ui'
 import { useToast } from '@/components/toast'
 import { auth, isDemo, type OAuthProvider } from '@/lib/repo'
@@ -23,17 +24,22 @@ function AuthLayout({ title, subtitle, children, footer }: { title: string; subt
           </motion.div>
         </div>
       </div>
-      <div className="relative hidden overflow-hidden bg-navy-600 lg:block">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(29,158,117,0.45),transparent_60%)]" />
-        <div className="relative flex h-full flex-col justify-end p-12 text-white">
-          <p className="max-w-md text-2xl font-semibold leading-snug">
-            When your manager asks what you delivered this quarter, send a link instead of scrambling through your emails.
-          </p>
-          <p className="mt-4 text-navy-100">Every day, on the record.</p>
-          <div className="mt-10 grid max-w-md grid-cols-3 gap-3">
-            {[['3 min', 'to log a day'], ['1 tap', 'standup notes'], ['0', 'appraisal panic']].map(([a, b]) => (
-              <div key={b} className="rounded-2xl bg-white/10 p-4 backdrop-blur"><p className="text-2xl font-bold">{a}</p><p className="text-sm text-navy-100">{b}</p></div>
-            ))}
+      <div className="relative hidden overflow-hidden bg-navy-700 lg:block">
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(29,158,117,0.45),transparent_60%),radial-gradient(ellipse_at_bottom_left,rgba(59,115,217,0.25),transparent_55%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(rgba(255,255,255,0.07)_1px,transparent_1px)] [background-size:22px_22px]" />
+        <div className="relative flex h-full min-h-screen flex-col px-12 py-12 text-white xl:px-16">
+          <div className="flex flex-1 items-center justify-center py-8 [@media(max-height:860px)]:-my-10 [@media(max-height:860px)]:scale-[0.85]">
+            <AuthShowcase />
+          </div>
+          <div className="mx-auto w-full max-w-[460px]">
+            <p className="text-2xl font-semibold leading-snug">
+              Log your day in plain words. Walk into every standup and appraisal with proof.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-2 text-sm text-navy-100">
+              {['3 min to log a day', '1-tap standup notes', 'Monthly reports for your manager'].map((t) => (
+                <span key={t} className="rounded-full border border-white/15 bg-white/5 px-3 py-1">{t}</span>
+              ))}
+            </div>
           </div>
         </div>
       </div>
