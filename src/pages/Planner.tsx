@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ArrowRightLeft, CalendarCheck2, Check, PenLine, Plus, Trash2 } from 'lucide-react'
+import { ArrowRightLeft, CalendarCheck2, Check, Loader2, PenLine, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/AppShell'
 import { Button, Card, CategoryChip, EmptyState, Input, PageLoader, Segmented, Select } from '@/components/ui'
 import { useToast } from '@/components/toast'
@@ -48,11 +48,22 @@ export default function Planner() {
     } finally { setAdding(false) }
   }
 
-  const toggle = async (t: Task) => {
-    const done = !t.done_at
-    await data.saveTask({ ...t, done_at: done ? new Date().toISOString() : null })
-    if (done && t.task_date === today) toast('Done! It\'s waiting in your Daily Log to add in one tap.')
-  }
+  // Ticking a task logs it (AI-refined) on its own day, so it feeds the next day's standup.
+  // Unticking removes the entry that was created from it.
+  const toggle = (t: Task) => run(`tick:${t.id}`, async () => {
+    if (!t.done_at) {
+      const { logged, aiNote } = await completeOld([t])
+      if (aiNote) toast(`Claude couldn't refine it (${aiNote}), so it was added as written.`, 'info')
+      if (logged) toast(`Done, and added to ${t.task_date === today ? "today's" : `${prettyDate(t.task_date, 'EEEE')}'s`} log.`)
+      return
+    }
+    await data.saveTask({ ...t, done_at: null })
+    if (editWindow(t.task_date, today, workDays) === 'locked') return
+    const key = t.title.trim().toLowerCase()
+    const linked = (await data.listEntries({ from: t.task_date, to: t.task_date })).filter((e) => e.raw_text.trim().toLowerCase() === key)
+    for (const e of linked) await data.deleteEntry(e.id)
+    if (linked.length) toast('Unticked, and removed from the log.', 'info')
+  })
 
   const [busy, setBusy] = useState<string | null>(null)
   const run = async (key: string, fn: () => Promise<void>) => {
@@ -117,7 +128,7 @@ export default function Planner() {
 
   return (
     <div>
-      <PageHeader title="Planner" subtitle="A light to-do list to guide your day. Ticked tasks can go straight into your log."
+      <PageHeader title="Planner" subtitle="Plan your day. Tick a task when it is done: it is tidied up by AI, added to that day's log, and shows in the next standup."
         actions={<Link to="/log"><Button variant="accent" size="sm" icon={<PenLine className="h-4 w-4" />}>Daily Log</Button></Link>} />
 
       <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
@@ -151,9 +162,9 @@ export default function Planner() {
                     return (
                       <motion.li key={t.id} layout initial={false} exit={{ opacity: 0, height: 0 }}
                         className="group flex items-center gap-3 rounded-xl px-3 py-3 hover:bg-canvas">
-                        <button onClick={() => toggle(t)} aria-label={t.done_at ? 'Mark not done' : 'Mark done'}
-                          className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition', t.done_at ? 'border-teal-500 bg-teal-500 text-white' : 'border-line hover:border-teal-400')}>
-                          {t.done_at && <Check className="h-4 w-4" />}
+                        <button onClick={() => toggle(t)} aria-label={t.done_at ? 'Mark not done' : 'Mark done'} disabled={!!busy} aria-busy={busy === `tick:${t.id}`}
+                          className={cn('flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border-2 transition disabled:cursor-wait', t.done_at ? 'border-teal-500 bg-teal-500 text-white' : 'border-line hover:border-teal-400')}>
+                          {busy === `tick:${t.id}` ? <Loader2 className="h-4 w-4 animate-spin text-teal-500" /> : t.done_at && <Check className="h-4 w-4" />}
                         </button>
                         <div className="min-w-0 flex-1">
                           <p className={cn('text-[15px]', t.done_at && 'text-muted line-through')}>{t.title}</p>
