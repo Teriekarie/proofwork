@@ -31,15 +31,17 @@ export default function StandupPage() {
   const generate = async (force = false) => {
     setBusy(true)
     try {
-      const [yEntries, tasks, recent] = await Promise.all([
+      const [yEntries, tasks, recent, yTasks] = await Promise.all([
         data.listEntries({ from: prev, to: prev }),
         data.listTasks({ from: today, to: today }),
         data.listEntries({ from: shiftDays(today, -7), to: today }),
+        data.listTasks({ from: prev, to: prev }),
       ])
       const lastByText = new Map<string, (typeof recent)[number]>()
       recent.forEach((e) => lastByText.set(e.refined_text, e))
       const built = buildStandup({
         yesterdayEntries: yEntries,
+        yesterdayDoneTasks: yTasks,
         todayTasks: tasks,
         inProgress: [...lastByText.values()].filter((e) => e.status === 'in_progress' && e.entry_date < today),
         recentBlockers: recent.filter((e) => e.entry_type === 'blocker' && e.entry_date >= shiftDays(today, -3)),

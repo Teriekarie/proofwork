@@ -6,13 +6,19 @@ import { countWorkDays, daysBetween, isWorkDay, periodLabel, prettyDate, shiftDa
 
 export function buildStandup(opts: {
   yesterdayEntries: Entry[]
+  /** Planner tasks ticked off on the previous work day; included when they weren't also logged. */
+  yesterdayDoneTasks?: Task[]
   todayTasks: Task[]
   inProgress: Entry[]
   recentBlockers: Entry[]
 }) {
-  const yesterday = opts.yesterdayEntries
-    .filter((e) => e.entry_type !== 'blocker')
-    .map((e) => (e.status === 'in_progress' ? `${e.refined_text} (in progress)` : e.refined_text))
+  const logged = new Set(opts.yesterdayEntries.map((e) => e.raw_text.trim().toLowerCase()))
+  const yesterday = [
+    ...opts.yesterdayEntries
+      .filter((e) => e.entry_type !== 'blocker')
+      .map((e) => (e.status === 'in_progress' ? `${e.refined_text} (in progress)` : e.refined_text)),
+    ...(opts.yesterdayDoneTasks ?? []).filter((t) => t.done_at && !logged.has(t.title.trim().toLowerCase())).map((t) => t.title),
+  ]
   const today = [
     ...opts.todayTasks.filter((t) => !t.done_at).map((t) => t.title),
     ...opts.inProgress.filter((e) => !opts.todayTasks.some((t) => t.title === e.refined_text)).map((e) => `Continue: ${e.refined_text}`),

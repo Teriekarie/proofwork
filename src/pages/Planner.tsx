@@ -7,7 +7,7 @@ import { Button, Card, CategoryChip, EmptyState, Input, PageLoader, Segmented, S
 import { useToast } from '@/components/toast'
 import { useSession } from '@/lib/session'
 import { data, useQuery } from '@/lib/hooks'
-import { isWorkDay, longDate, prettyDate, shiftDays } from '@/lib/dates'
+import { editWindow, isWorkDay, longDate, prettyDate, shiftDays } from '@/lib/dates'
 import type { Task } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
@@ -52,10 +52,43 @@ export default function Planner() {
     if (done && t.task_date === today) toast('Done! It\'s waiting in your Daily Log to add in one tap.')
   }
 
-  const carryOver = async (t: Task) => {
-    await data.saveTask({ ...t, task_date: today, carried_from: t.carried_from ?? t.task_date })
+  const [busy, setBusy] = useState<string | null>(null)
+  const run = async (key: string, fn: () => Promise<void>) => {
+    if (busy) return
+    setBusy(key)
+    try { await fn() } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(null) }
   }
-  const carryAll = async () => { for (const t of carry) await carryOver(t); toast(`Moved ${carry.length} tasks to today`) }
+
+  const carryOver = (t: Task) => data.saveTask({ ...t, task_date: today, carried_from: t.carried_from ?? t.task_date })
+
+  /** Close out an old task on its own day; if that day can still be logged, add it to that day's log too. */
+  const completeOld = async (t: Task): Promise<boolean> => {
+    await data.saveTask({ ...t, done_at: new Date().toISOString() })
+    if (editWindow(t.task_date, today, workDays) === 'locked') return false
+    const existing = await data.listEntries({ from: t.task_date, to: t.task_date })
+    if (existing.some((e) => e.raw_text.trim().toLowerCase() === t.title.trim().toLowerCase())) return true
+    const extraId = categories?.find((c) => c.is_extra)?.id ?? categories?.[0]?.id ?? ''
+    await data.addEntries([{
+      entry_date: t.task_date, category_id: t.category_id ?? extraId, metric_id: null, raw_text: t.title, refined_text: t.title,
+      entry_type: 'normal', status: 'done', quantity: null, impact_note: '', blocker_detail: '', evidence_url: '', stakeholders: [],
+      is_late: t.task_date !== today, ai_confidence: null,
+    }])
+    return true
+  }
+
+  const markDone = (t: Task) => run(`done:${t.id}`, async () => {
+    const logged = await completeOld(t)
+    toast(logged ? `Done, and added to ${prettyDate(t.task_date, 'EEEE')}'s log.` : `Marked done. ${prettyDate(t.task_date, 'EEE d MMM')} is locked, so it wasn't added to the log.`)
+  })
+  const moveToday = (t: Task) => run(`move:${t.id}`, async () => { await carryOver(t) })
+  const drop = (t: Task) => run(`drop:${t.id}`, async () => { await data.deleteTask(t.id) })
+  const moveAll = () => run('all-move', async () => { for (const t of carry) await carryOver(t); toast(`Moved ${carry.length} tasks to today`) })
+  const doneAll = () => run('all-done', async () => {
+    if (!confirm(`Mark all ${carry.length} unfinished tasks as done and add them to their days' logs?`)) return
+    let logged = 0
+    for (const t of carry) if (await completeOld(t)) logged++
+    toast(`Closed ${carry.length} tasks${logged ? `, ${logged} added to your log` : ''}.`)
+  })
 
   if (!categories) return <PageLoader />
   const open = (tasks ?? []).filter((t) => !t.done_at)
@@ -120,17 +153,29 @@ export default function Planner() {
         </div>
 
         <Card className="h-fit p-5">
-          <div className="flex items-center justify-between">
-            <h3 className="section-title">Unfinished</h3>
-            {carry.length > 1 && <Button size="sm" variant="ghost" onClick={carryAll}>Move all</Button>}
-          </div>
-          <p className="text-sm text-muted">Open tasks from the last two weeks.</p>
+          <h3 className="section-title">Unfinished</h3>
+          <p className="text-sm text-muted">Open tasks from the last two weeks. Close them out on their own day, or bring them into today.</p>
+          {carry.length > 1 && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <Button size="sm" variant="secondary" onClick={doneAll} loading={busy === 'all-done'} icon={<Check className="h-3.5 w-3.5" />}>Mark all done</Button>
+              <Button size="sm" variant="outline" onClick={moveAll} loading={busy === 'all-move'} icon={<ArrowRightLeft className="h-3.5 w-3.5" />}>Move all</Button>
+            </div>
+          )}
           {carry.length ? (
             <ul className="mt-3 space-y-2">
               {carry.map((t) => (
-                <li key={t.id} className="flex items-center gap-2 rounded-xl bg-canvas p-2.5">
-                  <div className="min-w-0 flex-1"><p className="truncate text-sm">{t.title}</p><p className="text-xs text-muted">{prettyDate(t.task_date)}</p></div>
-                  <Button size="sm" variant="secondary" onClick={() => carryOver(t)} icon={<ArrowRightLeft className="h-3.5 w-3.5" />}>Today</Button>
+                <li key={t.id} className="rounded-xl bg-canvas p-3">
+                  <p className="text-sm leading-snug">{t.title}</p>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className="mr-auto whitespace-nowrap text-xs text-muted">{prettyDate(t.task_date, 'EEE d MMM')}</span>
+                    <Button size="sm" variant="secondary" className="h-7 px-2 text-teal-700 dark:text-teal-300" onClick={() => markDone(t)} loading={busy === `done:${t.id}`}
+                      icon={<Check className="h-3.5 w-3.5" />} title={`Mark done on ${prettyDate(t.task_date, 'EEEE')}`}>Done</Button>
+                    <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => moveToday(t)} loading={busy === `move:${t.id}`}
+                      icon={<ArrowRightLeft className="h-3.5 w-3.5" />}>Today</Button>
+                    <button onClick={() => drop(t)} className="rounded-lg p-1.5 text-muted hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-500/10" aria-label={`Drop "${t.title}"`} title="Drop task">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
