@@ -6,7 +6,7 @@ import {
 import { Button, Card } from '@/components/ui'
 import { useSession } from '@/lib/session'
 import { data, useQuery } from '@/lib/hooks'
-import { greeting, longDate, previousWorkDay } from '@/lib/dates'
+import { earliestEditable, greeting, longDate, prettyDate, previousWorkDay } from '@/lib/dates'
 import { firstName, pluralize } from '@/lib/utils'
 
 const SECTIONS = [
@@ -136,7 +136,7 @@ export default function HomePage() {
           ))}
         </ol>
         <p className="mt-5 rounded-xl bg-canvas p-3 text-sm text-muted">
-          <b className="text-ink">Logging rule:</b> you can log today and fill in your previous work day ({prev}) if you forgot. Older days are read-only so your record stays trustworthy.
+          <b className="text-ink">Logging rule:</b> you can log today and fill in any earlier day this week if you forgot (from {prettyDate(earliestEditable(today, workDays), 'EEEE d MMM')}). Earlier weeks are read-only so your record stays trustworthy.
         </p>
       </Card>
     </div>

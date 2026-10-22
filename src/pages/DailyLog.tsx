@@ -9,7 +9,7 @@ import { useToast } from '@/components/toast'
 import { useSession } from '@/lib/session'
 import { data, useQuery } from '@/lib/hooks'
 import { organiseLog } from '@/lib/ai'
-import { editWindow, longDate, prettyDate, previousWorkDay } from '@/lib/dates'
+import { editableDays, editWindow, isWorkDay, longDate, prettyDate, shiftDays } from '@/lib/dates'
 import type { DayType, Entry, EntryDraft } from '@/lib/types'
 import { cn, pluralize } from '@/lib/utils'
 
@@ -22,7 +22,7 @@ const blankDraft = (category_id: string): EntryDraft => ({
 export default function DailyLog() {
   const { today, workDays } = useSession()
   const toast = useToast()
-  const prev = previousWorkDay(today, workDays)
+  const days = editableDays(today, workDays)
   const [params, setParams] = useSearchParams()
   const requested = params.get('date')
   const date = requested && editWindow(requested, today, workDays) !== 'future' && editWindow(requested, today, workDays) !== 'locked' ? requested : today
@@ -31,6 +31,7 @@ export default function DailyLog() {
   const { data: categories } = useQuery(() => data.listCategories(), [])
   const { data: metrics } = useQuery(() => data.listMetrics(), [])
   const { data: entries, loading } = useQuery(() => data.listEntries({ from: date, to: date }), [date])
+  const { data: weekEntries } = useQuery(() => data.listEntries({ from: days[days.length - 1], to: today }), [today, days.length])
   const { data: log } = useQuery(() => data.getDailyLog(date), [date])
   const { data: tasks } = useQuery(() => data.listTasks({ from: date, to: date }), [date])
 
@@ -108,16 +109,25 @@ export default function DailyLog() {
       <PageHeader title="Daily Log" subtitle={longDate(date)}
         actions={<Link to="/history"><Button variant="outline" size="sm" icon={<CalendarClock className="h-4 w-4" />}>Older days</Button></Link>} />
 
-      {/* Day switcher */}
+      {/* Day switcher: every day that can still be logged, today first */}
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        {[{ d: today, label: 'Today', sub: prettyDate(today) }, { d: prev, label: 'Previous work day', sub: prettyDate(prev) }].map((o) => (
-          <button key={o.d} onClick={() => { setParams(o.d === today ? {} : { date: o.d }); setDrafts(null) }}
-            className={cn('rounded-xl border px-4 py-2 text-left transition', date === o.d ? 'border-teal-500 bg-teal-50 dark:bg-teal-500/10' : 'border-line bg-surface hover:border-teal-300')}>
-            <span className="block text-sm font-semibold">{o.label}</span>
-            <span className="block text-xs text-muted">{o.sub}</span>
-          </button>
-        ))}
-        <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" />Older days are read-only</span>
+        {days.map((d) => {
+          const n = weekEntries?.filter((e) => e.entry_date === d).length ?? 0
+          const off = !isWorkDay(d, workDays)
+          const label = d === today ? 'Today' : d === shiftDays(today, -1) ? 'Yesterday' : prettyDate(d, 'EEEE')
+          return (
+            <button key={d} onClick={() => { setParams(d === today ? {} : { date: d }); setDrafts(null) }}
+              className={cn('min-w-[104px] rounded-xl border px-4 py-2 text-left transition',
+                date === d ? 'border-teal-500 bg-teal-50 dark:bg-teal-500/10' : 'border-line bg-surface hover:border-teal-300', off && date !== d && 'opacity-60')}>
+              <span className="block text-sm font-semibold">{label}</span>
+              <span className="flex items-center justify-between gap-2 text-xs text-muted">
+                {prettyDate(d, 'EEE d MMM')}
+                <span className={cn('tabular-nums', n ? 'font-semibold text-teal-600 dark:text-teal-400' : 'text-muted/70')}>{n || '–'}</span>
+              </span>
+            </button>
+          )
+        })}
+        <span className="ml-auto inline-flex items-center gap-1.5 text-xs text-muted"><Lock className="h-3.5 w-3.5" />Earlier weeks are read-only</span>
       </div>
 
       {win === 'late' && (

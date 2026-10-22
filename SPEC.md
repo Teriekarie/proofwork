@@ -17,7 +17,7 @@ later version.
 | Topic | Decision |
 |---|---|
 | Name | Proofwork |
-| Logging window | Add/edit entries for **today** and the **previous working day** (late entries get a `late` tag). Older days are read-only. No future dates. |
+| Logging window | Add/edit entries for **any day of the current week up to today**, plus the **previous working day** if it falls in last week (so Monday can fill Friday). Days before today get a `late` tag. Earlier weeks are read-only. No future dates. |
 | Sign-in | Email + password, Google, Microsoft |
 | Planner | In v1 |
 | Manager access | v1: export (PDF / Word / copy) **and** a read-only share link per report (revocable, optional expiry). v2: company workspaces where managers see their team. |

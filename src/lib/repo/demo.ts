@@ -134,7 +134,7 @@ function assertWritable(date: LogDate) {
   const p = me().profile
   const w = editWindow(date, todayIn(p.timezone), p.work_days)
   if (w === 'future') throw new RepoError("You can't log work for a future date.", 'future_date')
-  if (w === 'locked') throw new RepoError('This day is locked. You can log today and your previous work day only.', 'locked_date')
+  if (w === 'locked') throw new RepoError('This day is locked. You can log any day this week up to today (and your previous work day).', 'locked_date')
 }
 
 function commit<T>(v: T): T { persist(); return v }

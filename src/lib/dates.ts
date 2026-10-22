@@ -50,15 +50,29 @@ export function previousWorkDay(d: LogDate, workDays: number[]): LogDate {
 export type EditWindow = 'today' | 'late' | 'locked' | 'future'
 
 /**
- * Logging rule: today is open, the previous work day is open as a late entry,
- * anything older is read-only and future dates are never allowed.
+ * Earliest day that can still be logged: Monday of the current week, or the
+ * previous work day if that is earlier (so on a Monday you can still fill in Friday).
+ */
+export function earliestEditable(today: LogDate, workDays: number[]): LogDate {
+  const monday = toLogDate(startOfWeek(toDate(today), { weekStartsOn: 1 }))
+  const prev = previousWorkDay(today, workDays)
+  return prev < monday ? prev : monday
+}
+
+/**
+ * Logging rule: today is open; earlier days this week (and the previous work day)
+ * are open as late entries; anything older is read-only; future dates are never allowed.
  */
 export function editWindow(d: LogDate, today: LogDate, workDays: number[]): EditWindow {
   if (d > today) return 'future'
   if (d === today) return 'today'
-  const prev = previousWorkDay(today, workDays)
-  if (d >= prev) return 'late'
+  if (d >= earliestEditable(today, workDays)) return 'late'
   return 'locked'
+}
+
+/** Every day that can currently be logged, most recent first (today first). */
+export function editableDays(today: LogDate, workDays: number[]): LogDate[] {
+  return daysBetween(earliestEditable(today, workDays), today).reverse()
 }
 
 export function periodRange(type: PeriodType, anchor: LogDate): { start: LogDate; end: LogDate } {

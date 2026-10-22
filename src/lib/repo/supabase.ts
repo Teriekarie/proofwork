@@ -26,7 +26,7 @@ function toSession(u: User | null | undefined): Session | null {
 function fail(e: { message: string; code?: string } | null): never {
   const msg = e?.message ?? 'Something went wrong.'
   if (msg.includes('PW_FUTURE_DATE')) throw new RepoError("You can't log work for a future date.", 'future_date')
-  if (msg.includes('PW_LOCKED_DATE')) throw new RepoError('This day is locked. You can log today and your previous work day only.', 'locked_date')
+  if (msg.includes('PW_LOCKED_DATE')) throw new RepoError('This day is locked. You can log any day this week up to today (and your previous work day).', 'locked_date')
   if (e?.code === '23505' && msg.includes('username')) throw new RepoError('That username is taken.', 'duplicate_username')
   throw new RepoError(msg, e?.code)
 }
