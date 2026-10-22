@@ -1,14 +1,15 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { CalendarClock, Check, ClipboardList, Lock, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
+import { AlertTriangle, CalendarClock, Check, ClipboardList, Lock, Plus, Sparkles, Trash2, Wand2 } from 'lucide-react'
 import { PageHeader } from '@/components/AppShell'
-import { Button, Card, EmptyState, Modal, PageLoader, Select, Textarea } from '@/components/ui'
+import { Button, Card, EmptyState, Modal, PageLoader, Select } from '@/components/ui'
 import { EntryCard, EntryEditor, type EditableEntry } from '@/components/EntryParts'
 import { useToast } from '@/components/toast'
 import { useSession } from '@/lib/session'
 import { data, useQuery } from '@/lib/hooks'
-import { organiseLog } from '@/lib/ai'
+import { organiseLog, refineItems } from '@/lib/ai'
+import { BulletTextarea } from '@/components/BulletTextarea'
 import { editableDays, editWindow, isWorkDay, longDate, prettyDate, shiftDays } from '@/lib/dates'
 import type { DayType, Entry, EntryDraft } from '@/lib/types'
 import { cn, pluralize } from '@/lib/utils'
@@ -49,12 +50,29 @@ export default function DailyLog() {
 
   const doneTasksNotLogged = (tasks ?? []).filter((t) => t.done_at && !(entries ?? []).some((e) => e.raw_text === t.title))
 
+  const [blockers, setBlockers] = useState('')
+  const blockerLines = blockers.split('\n').map((l) => l.replace(/^\s*([-*•]|\d+[.)])\s*/, '').trim()).filter(Boolean)
+  const hasText = !!raw.replace(/[•\s]/g, '') || blockerLines.length > 0
+
   const organise = async () => {
-    if (!raw.trim() || !categories || !metrics) return
+    if (!hasText || !categories || !metrics) return
     setBusy(true)
     try {
-      const r = await organiseLog(raw, categories, metrics)
-      setDrafts((d) => [...(d ?? []), ...r.value])
+      // Each blocker is sent as its own tagged line (no heading, so a heading can't become an "item").
+      const combined = [raw.trim(), ...blockerLines.map((l) => `• Blocked: ${l}`)].filter(Boolean).join('\n')
+      const r = await organiseLog(combined, categories, metrics)
+      // Anything typed in the blockers box is always a blocker, whatever the AI decided.
+      const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+      const blockerKeys = blockerLines.map(norm)
+      const value = r.value.map((d) => {
+        const k = norm(d.raw_text)
+        const fromBox = blockerKeys.some((b) => b && k && (b.includes(k) || k.includes(b)))
+        if (!fromBox) return d
+        const untag = (s: string) => s.replace(/^\s*blocked:\s*/i, '').replace(/^./, (c) => c.toUpperCase())
+        const refined = untag(d.refined_text)
+        return { ...d, raw_text: untag(d.raw_text), refined_text: refined, entry_type: 'blocker' as const, blocker_detail: d.blocker_detail ? untag(d.blocker_detail) : refined }
+      })
+      setDrafts((d) => [...(d ?? []), ...value])
       setAiSource(r.source)
       if (r.reason) toast(`Claude couldn't organise this (${r.reason}). Used the basic offline organiser instead.`, 'error')
       if (!r.value.length) toast("Couldn't find any work items in that. Try one item per line.", 'info')
@@ -72,14 +90,47 @@ export default function DailyLog() {
         impact_note: d.impact_note, blocker_detail: d.blocker_detail, evidence_url: d.evidence_url ?? '', stakeholders: d.stakeholders,
         is_late: win === 'late', ai_confidence: d.ai_confidence,
       })))
-      if (raw.trim()) await data.saveDailyLog(date, { raw_input: [log?.raw_input, raw.trim()].filter(Boolean).join('\n\n') })
+      const typed = [raw.trim(), blockerLines.length ? `Blockers:\n${blockerLines.map((l) => `• ${l}`).join('\n')}` : ''].filter(Boolean).join('\n\n')
+      if (typed) await data.saveDailyLog(date, { raw_input: [log?.raw_input, typed].filter(Boolean).join('\n\n') })
       toast(`Saved ${pluralize(valid.length, 'entry', 'entries')} to ${win === 'today' ? 'today' : prettyDate(date)}`)
-      setDrafts(null); setRaw(''); setAiSource(null)
+      setDrafts(null); setRaw(''); setBlockers(''); setAiSource(null)
     } catch (e) { toast((e as Error).message, 'error') } finally { setSaving(false) }
   }
 
-  const addTaskDraft = (title: string, category_id: string | null) =>
-    setDrafts((d) => [...(d ?? []), { ...blankDraft(category_id ?? extraId), raw_text: title, refined_text: title }])
+  // Planner tasks go into the writing box so the AI refines and files them with everything else.
+  const addTaskToBox = (title: string) => {
+    setRaw((r) => (r.replace(/[•\s]/g, '') ? `${r.replace(/\s*$/, '')}\n• ${title}` : `• ${title}`))
+    toast('Added to the box. Click Organise with AI when you\'re ready.', 'info')
+  }
+
+  // Entries saved without AI refinement (e.g. typed manually, or added before AI was on).
+  const unrefined = (entries ?? []).filter((e) => e.refined_text.trim() === e.raw_text.trim())
+  const [tidying, setTidying] = useState(false)
+  const tidyUp = async () => {
+    if (!unrefined.length || !categories || !metrics) return
+    setTidying(true)
+    try {
+      const r = await refineItems(unrefined.map((e) => e.raw_text), categories, metrics)
+      if (r.reason) { toast(`Claude isn't available right now (${r.reason}).`, 'error'); return }
+      for (const [i, d] of r.value.entries()) {
+        const e = unrefined[i]
+        const wasExtra = catById.get(e.category_id)?.is_extra
+        await data.updateEntry(e.id, {
+          refined_text: d.refined_text,
+          // Keep a KPI the user chose; re-file entries sitting in Beyond Scope.
+          category_id: wasExtra ? d.category_id : e.category_id,
+          metric_id: wasExtra ? d.metric_id : e.metric_id,
+          quantity: e.quantity ?? d.quantity,
+          entry_type: e.entry_type === 'normal' ? d.entry_type : e.entry_type,
+          status: d.status,
+          stakeholders: e.stakeholders.length ? e.stakeholders : d.stakeholders,
+          impact_note: e.impact_note || d.impact_note,
+          blocker_detail: e.blocker_detail || d.blocker_detail,
+        })
+      }
+      toast(`Tidied ${pluralize(unrefined.length, 'entry', 'entries')} with Claude`)
+    } catch (err) { toast((err as Error).message, 'error') } finally { setTidying(false) }
+  }
 
   const saveEdit = async () => {
     if (!editing || !editValue) return
@@ -150,14 +201,20 @@ export default function DailyLog() {
               <p className="mt-4 rounded-xl bg-canvas p-4 text-sm text-muted">This day is marked as <b className="text-ink">{log!.day_type === 'holiday' ? 'a public holiday' : log!.day_type === 'sick' ? 'a sick day' : 'leave'}</b>. It won't count against your streak or activity. Switch back to "Work day" to log work.</p>
             ) : (
               <>
-                <Textarea value={raw} onChange={(e) => setRaw(e.target.value)} rows={6} className="mt-4 text-[15px]"
-                  onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') organise() }}
-                  placeholder={'Write it how you\'d say it, e.g.\n\nDid an automation for licensing certification reminders, had a review call with HR on their intranet design page, stayed late to fix the Q3 dashboard for leadership. Still waiting on IT for database access.'} />
+                <BulletTextarea value={raw} onValue={setRaw} onSubmit={organise} rows={6} className="mt-4 text-[15px]" aria-label="What you worked on"
+                  placeholder={'Start typing. Each Enter starts a new item, e.g.\n\n• did an automation for licensing certification reminders\n• review call with HR on their intranet design page\n• stayed late to fix the Q3 dashboard for leadership'} />
+                <div className="mt-3">
+                  <label htmlFor="blockers" className="mb-1.5 flex items-center gap-1.5 text-sm font-medium">
+                    <AlertTriangle className="h-4 w-4 text-red-500" />Anything blocking you? <span className="font-normal text-muted">(optional)</span>
+                  </label>
+                  <BulletTextarea id="blockers" value={blockers} onValue={setBlockers} onSubmit={organise} rows={2} className="min-h-[64px] text-[15px]"
+                    placeholder="• still waiting on IT for database access" />
+                </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-xs text-muted">Tip: Ctrl + Enter to organise. Commas, new lines or bullets all work.</p>
+                  <p className="text-xs text-muted">Enter = new item · Shift + Enter = new line · Ctrl + Enter = organise</p>
                   <div className="flex gap-2">
                     <Button variant="outline" size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => setDrafts((d) => [...(d ?? []), blankDraft(extraId)])}>Add manually</Button>
-                    <Button variant="accent" size="sm" loading={busy} disabled={!raw.trim()} onClick={organise} icon={<Wand2 className="h-4 w-4" />}>Organise with AI</Button>
+                    <Button variant="accent" size="sm" loading={busy} disabled={!hasText} onClick={organise} icon={<Wand2 className="h-4 w-4" />}>Organise with AI</Button>
                   </div>
                 </div>
               </>
@@ -197,7 +254,15 @@ export default function DailyLog() {
 
           {/* Saved */}
           <Card className="p-5">
-            <h2 className="section-title">Logged for {win === 'today' ? 'today' : prettyDate(date)} <span className="font-normal text-muted">· {entries?.length ?? 0}</span></h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="section-title">Logged for {win === 'today' ? 'today' : prettyDate(date)} <span className="font-normal text-muted">· {entries?.length ?? 0}</span></h2>
+              {unrefined.length > 0 && (
+                <Button size="sm" variant="secondary" loading={tidying} onClick={tidyUp} icon={<Sparkles className="h-4 w-4" />}
+                  title="Rewrite raw entries professionally and file them under the right KPI">
+                  Tidy up {unrefined.length} with AI
+                </Button>
+              )}
+            </div>
             {loading && !entries ? <PageLoader /> : entries && entries.length ? (
               <div className="mt-4 space-y-2.5">
                 {entries.map((e) => (
@@ -234,7 +299,7 @@ export default function DailyLog() {
                 {doneTasksNotLogged.map((t) => (
                   <li key={t.id} className="flex items-center justify-between gap-2 rounded-xl bg-canvas p-2.5 text-sm">
                     <span className="min-w-0 truncate">{t.title}</span>
-                    <Button size="sm" variant="secondary" onClick={() => addTaskDraft(t.title, t.category_id)} icon={<Plus className="h-3.5 w-3.5" />}>Log</Button>
+                    <Button size="sm" variant="secondary" onClick={() => addTaskToBox(t.title)} icon={<Plus className="h-3.5 w-3.5" />}>Log</Button>
                   </li>
                 ))}
               </ul>

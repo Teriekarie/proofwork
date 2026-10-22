@@ -5,6 +5,7 @@ import { ArrowRightLeft, CalendarCheck2, Check, PenLine, Plus, Trash2 } from 'lu
 import { PageHeader } from '@/components/AppShell'
 import { Button, Card, CategoryChip, EmptyState, Input, PageLoader, Segmented, Select } from '@/components/ui'
 import { useToast } from '@/components/toast'
+import { refineItems } from '@/lib/ai'
 import { useSession } from '@/lib/session'
 import { data, useQuery } from '@/lib/hooks'
 import { editWindow, isWorkDay, longDate, prettyDate, shiftDays } from '@/lib/dates'
@@ -27,6 +28,7 @@ export default function Planner() {
   const [cat, setCat] = useState('')
 
   const { data: categories } = useQuery(() => data.listCategories(), [])
+  const { data: metrics } = useQuery(() => data.listMetrics(), [])
   const { data: tasks, loading } = useQuery(() => data.listTasks({ from: date, to: date }), [date])
   const { data: older } = useQuery(() => data.listTasks({ from: shiftDays(today, -14), to: shiftDays(today, -1) }), [today])
   const catById = useMemo(() => new Map((categories ?? []).map((c) => [c.id, c])), [categories])
@@ -61,23 +63,41 @@ export default function Planner() {
 
   const carryOver = (t: Task) => data.saveTask({ ...t, task_date: today, carried_from: t.carried_from ?? t.task_date })
 
-  /** Close out an old task on its own day; if that day can still be logged, add it to that day's log too. */
-  const completeOld = async (t: Task): Promise<boolean> => {
-    await data.saveTask({ ...t, done_at: new Date().toISOString() })
-    if (editWindow(t.task_date, today, workDays) === 'locked') return false
-    const existing = await data.listEntries({ from: t.task_date, to: t.task_date })
-    if (existing.some((e) => e.raw_text.trim().toLowerCase() === t.title.trim().toLowerCase())) return true
-    const extraId = categories?.find((c) => c.is_extra)?.id ?? categories?.[0]?.id ?? ''
-    await data.addEntries([{
-      entry_date: t.task_date, category_id: t.category_id ?? extraId, metric_id: null, raw_text: t.title, refined_text: t.title,
-      entry_type: 'normal', status: 'done', quantity: null, impact_note: '', blocker_detail: '', evidence_url: '', stakeholders: [],
-      is_late: t.task_date !== today, ai_confidence: null,
-    }])
-    return true
+  /**
+   * Close out old tasks on their own day. Tasks whose day can still be logged are refined by the AI
+   * (wording + KPI; a task's own KPI wins) and added to that day's log. Returns how many were logged.
+   */
+  const completeOld = async (list: Task[]): Promise<{ logged: number; aiNote?: string }> => {
+    const now = new Date().toISOString()
+    for (const t of list) await data.saveTask({ ...t, done_at: now })
+    const byDate = new Map<string, Task[]>()
+    list.filter((t) => editWindow(t.task_date, today, workDays) !== 'locked').forEach((t) => byDate.set(t.task_date, [...(byDate.get(t.task_date) ?? []), t]))
+    let logged = 0
+    let aiNote: string | undefined
+    for (const [day, dayTasks] of byDate) {
+      const existing = new Set((await data.listEntries({ from: day, to: day })).map((e) => e.raw_text.trim().toLowerCase()))
+      const fresh = dayTasks.filter((t) => !existing.has(t.title.trim().toLowerCase()))
+      if (!fresh.length) continue
+      const r = await refineItems(fresh.map((t) => t.title), categories ?? [], metrics ?? [])
+      if (r.reason) aiNote = r.reason
+      await data.addEntries(r.value.map((d, i) => {
+        const t = fresh[i]
+        const keepCat = t.category_id && t.category_id !== d.category_id
+        return {
+          entry_date: day, category_id: t.category_id ?? d.category_id, metric_id: keepCat ? null : d.metric_id,
+          raw_text: t.title, refined_text: d.refined_text, entry_type: d.entry_type, status: 'done' as const, quantity: keepCat ? null : d.quantity,
+          impact_note: d.impact_note, blocker_detail: d.blocker_detail, evidence_url: '', stakeholders: d.stakeholders,
+          is_late: day !== today, ai_confidence: d.ai_confidence,
+        }
+      }))
+      logged += fresh.length
+    }
+    return { logged, aiNote }
   }
 
   const markDone = (t: Task) => run(`done:${t.id}`, async () => {
-    const logged = await completeOld(t)
+    const { logged, aiNote } = await completeOld([t])
+    if (aiNote) toast(`Claude couldn't refine it (${aiNote}), so it was added as written.`, 'info')
     toast(logged ? `Done, and added to ${prettyDate(t.task_date, 'EEEE')}'s log.` : `Marked done. ${prettyDate(t.task_date, 'EEE d MMM')} is locked, so it wasn't added to the log.`)
   })
   const moveToday = (t: Task) => run(`move:${t.id}`, async () => { await carryOver(t) })
@@ -85,8 +105,8 @@ export default function Planner() {
   const moveAll = () => run('all-move', async () => { for (const t of carry) await carryOver(t); toast(`Moved ${carry.length} tasks to today`) })
   const doneAll = () => run('all-done', async () => {
     if (!confirm(`Mark all ${carry.length} unfinished tasks as done and add them to their days' logs?`)) return
-    let logged = 0
-    for (const t of carry) if (await completeOld(t)) logged++
+    const { logged, aiNote } = await completeOld(carry)
+    if (aiNote) toast(`Claude couldn't refine some tasks (${aiNote}), so they were added as written.`, 'info')
     toast(`Closed ${carry.length} tasks${logged ? `, ${logged} added to your log` : ''}.`)
   })
 

@@ -52,6 +52,30 @@ export async function organiseLog(raw: string, categories: KpiCategory[], metric
   return { value: heuristicOrganise(raw, categories, metrics), source: 'offline', reason }
 }
 
+/**
+ * Refine a list of short items (planner tasks, raw entries) into one draft each, in the same order.
+ * Tries a single AI call; if the AI splits or merges items, falls back to one call per item.
+ */
+export async function refineItems(items: string[], categories: KpiCategory[], metrics: KpiMetric[]): Promise<AiResult<EntryDraft[]>> {
+  if (!items.length) return { value: [], source: 'claude' }
+  const batch = await organiseLog(items.map((t) => `• ${t}`).join('\n'), categories, metrics)
+  if (batch.value.length === items.length) return batch
+  const one = await Promise.all(items.map((t) => organiseLog(t, categories, metrics)))
+  return {
+    value: one.map((r, i) => {
+      const [first, ...more] = r.value
+      if (!first) {
+        const extra = categories.find((c) => c.is_extra) ?? categories[0]
+        return { raw_text: items[i], refined_text: items[i], category_id: extra?.id ?? '', metric_id: null, entry_type: 'normal' as const, status: 'done' as const, quantity: null, stakeholders: [], impact_note: '', blocker_detail: '', ai_confidence: 0.3 }
+      }
+      // Keep one entry per item: fold any extra pieces the AI split off back into the first.
+      return more.length ? { ...first, raw_text: items[i], refined_text: [first.refined_text, ...more.map((m) => m.refined_text)].join(' ') } : { ...first, raw_text: items[i] }
+    }),
+    source: one.every((r) => r.source === 'claude') ? 'claude' : 'offline',
+    reason: one.find((r) => r.reason)?.reason,
+  }
+}
+
 export async function polishReport(content: ReportContent, ctx: { name: string; jobTitle: string; periodLabel: string }): Promise<AiResult<ReportContent>> {
   if (!isDemo && content.stats.entries > 0) {
     try {
