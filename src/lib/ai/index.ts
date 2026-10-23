@@ -4,9 +4,19 @@
  * In demo mode, or if the function fails, rule-based fallbacks are used.
  */
 import type { EntryDraft, KpiCategory, KpiDraft, KpiMetric, ReportContent } from '../types'
-import { isDemo } from '../repo'
+import { data, isDemo } from '../repo'
 import { getSupabase } from '../repo/supabase'
 import { heuristicKpis, heuristicOrganise } from './heuristics'
+
+// The user's role context helps the AI file work correctly (and know their employer isn't a stakeholder).
+let whoCache: { at: number; value: { job_title: string; department: string; company: string } } | null = null
+async function who() {
+  if (whoCache && Date.now() - whoCache.at < 5 * 60_000) return whoCache.value
+  const p = await data.getProfile().catch(() => null)
+  const value = { job_title: p?.job_title ?? '', department: p?.department ?? '', company: p?.company ?? '' }
+  whoCache = { at: Date.now(), value }
+  return value
+}
 
 /** `reason` explains why the offline fallback was used, so the UI can say so. */
 export interface AiResult<T> { value: T; source: 'claude' | 'offline'; reason?: string }
@@ -43,6 +53,7 @@ export async function organiseLog(raw: string, categories: KpiCategory[], metric
     try {
       const value = await callAi<EntryDraft[]>('organise_log', {
         raw,
+        who: await who(),
         categories: categories.map((c) => ({ id: c.id, name: c.name, description: c.description, is_extra: c.is_extra })),
         metrics: metrics.map((m) => ({ id: m.id, category_id: m.category_id, name: m.name, unit: m.unit })),
       })

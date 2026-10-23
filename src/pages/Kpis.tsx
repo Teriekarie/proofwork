@@ -7,7 +7,7 @@ import { KpiDraftEditor } from '@/components/KpiDraftEditor'
 import { useToast } from '@/components/toast'
 import { useSession } from '@/lib/session'
 import { data, useQuery } from '@/lib/hooks'
-import { generateKpis } from '@/lib/ai'
+import { generateKpis, refineItems } from '@/lib/ai'
 import { periodRange } from '@/lib/dates'
 import { suggestKpisFromExtras } from '@/lib/compose'
 import type { KpiCategory, KpiDraft, KpiMetric, MetricPeriod } from '@/lib/types'
@@ -24,10 +24,32 @@ export default function Kpis() {
   const [edit, setEdit] = useState<{ cat: Partial<KpiCategory> & { name: string }; metrics: MetricDraft[] } | null>(null)
   const [regen, setRegen] = useState<KpiDraft[] | null>(null)
   const [regenBusy, setRegenBusy] = useState(false)
+  const [refiling, setRefiling] = useState(false)
 
   if (!categories || !metrics || !entries) return <PageLoader />
   const month = periodRange('month', today)
   const extra = categories.find((c) => c.is_extra)
+  // Entries whose KPI was archived (e.g. after regenerating KPIs) no longer count towards any current KPI.
+  const activeIds = new Set(categories.map((c) => c.id))
+  const orphaned = entries.filter((e) => !activeIds.has(e.category_id))
+
+  // Re-file orphaned entries under the current KPIs with the AI. Only the KPI, metric and count change; the wording stays.
+  const refile = async () => {
+    setRefiling(true)
+    try {
+      let moved = 0
+      for (let i = 0; i < orphaned.length; i += 15) {
+        const chunk = orphaned.slice(i, i + 15)
+        const r = await refineItems(chunk.map((e) => e.refined_text || e.raw_text), categories, metrics)
+        if (r.reason) { toast(`Claude isn't available right now (${r.reason}).`, 'error'); break }
+        for (const [j, d] of r.value.entries()) {
+          await data.updateEntry(chunk[j].id, { category_id: d.category_id, metric_id: d.metric_id, quantity: chunk[j].quantity ?? d.quantity })
+          moved++
+        }
+      }
+      if (moved) toast(`Re-filed ${moved} ${moved === 1 ? 'entry' : 'entries'} under your current KPIs`)
+    } catch (e) { toast((e as Error).message, 'error') } finally { setRefiling(false) }
+  }
   const suggestions = suggestKpisFromExtras(entries, extra?.id)
 
   const openEdit = (c?: KpiCategory, preset?: string) => setEdit({
@@ -77,6 +99,16 @@ export default function Kpis() {
           <Button variant="outline" size="sm" icon={<Sparkles className="h-4 w-4" />} loading={regenBusy} onClick={startRegen}>Regenerate from JD</Button>
           <Button size="sm" icon={<Plus className="h-4 w-4" />} onClick={() => openEdit()}>Add KPI</Button>
         </>} />
+
+      {orphaned.length > 0 && (
+        <Card className="mb-5 flex flex-col gap-3 border-amber-200 bg-amber-50/60 p-5 dark:border-amber-500/30 dark:bg-amber-500/5 sm:flex-row sm:items-center">
+          <div className="flex-1">
+            <h2 className="flex items-center gap-2 font-semibold"><Archive className="h-5 w-5 text-amber-600" />{orphaned.length} {orphaned.length === 1 ? 'entry is' : 'entries are'} filed under old KPIs</h2>
+            <p className="mt-1 text-sm text-muted">They were logged before you regenerated your KPIs, so they don't count towards any current KPI on your dashboard or reports. Re-file them and Claude will match each one to your current KPIs. The wording stays the same.</p>
+          </div>
+          <Button variant="accent" loading={refiling} onClick={refile} icon={<Sparkles className="h-4 w-4" />}>Re-file with AI</Button>
+        </Card>
+      )}
 
       {suggestions.length > 0 && (
         <Card className="mb-5 border-teal-200 bg-teal-50/50 p-5 dark:border-teal-500/30 dark:bg-teal-500/5">

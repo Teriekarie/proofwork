@@ -109,32 +109,47 @@ Do not create a catch-all "Other" category; the app adds "Beyond Scope" automati
 interface Cat { id: string; name: string; description: string; is_extra: boolean }
 interface Met { id: string; category_id: string; name: string; unit: string }
 
-async function organiseLog(raw: string, categories: Cat[], metrics: Met[]) {
+interface Who { job_title?: string; department?: string; company?: string }
+
+function organisePrompt(raw: string, categories: Cat[], metrics: Met[], who: Who = {}) {
   const extra = categories.find((c) => c.is_extra)
-  const cats = categories.map((c) => `- id: ${c.id} | ${c.name}${c.is_extra ? ' (ONLY for work that genuinely fits no other category)' : ''}: ${c.description}`).join('\n')
-  const ms = metrics.map((m) => `- id: ${m.id} | category ${m.category_id} | ${m.name} (${m.unit})`).join('\n') || '(none)'
-  const out = await ask<{ entries: unknown[] }>(ENTRIES_SCHEMA, `KPI categories:
-${cats}
+  const kpis = categories.filter((c) => !c.is_extra).map((c) => {
+    const ms = metrics.filter((m) => m.category_id === c.id).map((m) => `    - metric id ${m.id}: ${m.name} (${m.unit})`).join('\n')
+    return `- id ${c.id}: ${c.name}. ${c.description}${ms ? `\n  Metrics:\n${ms}` : ''}`
+  }).join('\n')
+  const role = [who.job_title, who.department && `in ${who.department}`, who.company && `at ${who.company}`].filter(Boolean).join(' ')
+  return `The user${role ? ` is ${role}` : ''}.${who.company ? ` "${who.company}" is their own employer, not a stakeholder.` : ''}
 
-Metrics:
-${ms}
+Their KPI categories:
+${kpis}
+${extra ? `- id ${extra.id}: Beyond Scope. Work that genuinely fits none of the KPIs above.` : ''}
 
-The user's notes about their work day (may be bullets, run-on sentences, typos, shorthand):
+Their notes for one work day (bullets, run-on sentences, typos or shorthand):
 ${tag(raw)}
 
-Turn this into clean work-log entries, one per distinct piece of work. Skip filler that isn't work.
+Turn the notes into work-log entries, one per distinct piece of work. Ignore anything that isn't work.
+
 For each entry:
-- raw_text: the user's original words for that item (without bullet characters)
-- refined_text: one or two professional past-tense sentences. Fix spelling and grammar, expand shorthand, keep names and specifics. E.g. "did automation for licence reminders" → "Built an automated reminder workflow for licensing certification renewals". Use "Continued work on…" for ongoing items. No embellishment.
-- category_id: the id of the best-fitting KPI category above${extra ? `; use ${extra.id} only if nothing else fits` : ''}
-- metric_id: a metric id from the SAME category if the item counts toward it (e.g. built an automation → automations shipped), else null
-- quantity: a number if stated or clearly 1 for a countable deliverable that has a metric, else null
-- entry_type: "blocker" if they are blocked or waiting on someone; "above_beyond" only if clearly beyond normal expectations (out of hours, outside their role, exceptional outcome, stepping in for others); otherwise "normal"
-- status: "in_progress" if ongoing or unfinished, else "done"
-- stakeholders: people, teams, departments or clients involved (e.g. "HR", "Simeon", "HSE Manager"), else []
-- impact_note: for above_beyond, a short reason it was exceptional using only stated facts; else ""
-- blocker_detail: for blockers, what is blocked and who needs to act; else ""
-- ai_confidence: 0–1, how sure you are of the category`, 'low')
+- raw_text: the user's words for that item, without bullet characters or a leading "Blocked:" tag.
+- refined_text: one clear sentence in the past tense, at most about 25 words, ending with a full stop.
+  - Fix spelling, grammar and capitalisation; expand obvious shorthand; keep every name, product, form and number exactly.
+  - Add nothing the user didn't say: no new scope ("across the group"), no outcomes, no adjectives like "comprehensive" or "key".
+  - Pick the verb from the user's words. If their role is unclear, don't guess (write "Took part in the onboarding workshop", not "Attended" or "Led").
+  - Ongoing work starts with "Continued work on…" or "Started…".
+  - Example: "fixed filters on sales dash for fin team" → "Fixed the filters on the sales dashboard for the Finance team."
+- category_id: the KPI this work most directly advances. Read each KPI's description and metrics and choose the closest reasonable fit; for example, researching or evaluating AI tools belongs under an AI or emerging-technology KPI. Use Beyond Scope only when no KPI reasonably covers the work.
+- metric_id: a metric from the SAME KPI when the item is one of the things it counts (built an automation → automation workflows deployed; evaluated a tool → technologies evaluated); otherwise null.
+- quantity: the number the user gave, or 1 when the item is one clear unit of a chosen metric; otherwise null.
+- entry_type: "blocker" if they are blocked or waiting on someone or something; "above_beyond" only when clearly beyond normal expectations (out of hours, outside their role, an exceptional result, covering for someone); otherwise "normal".
+- status: "in_progress" only when the words say so (continue, ongoing, started, still, working on, halfway); otherwise "done".
+- stakeholders: people, teams, departments or outside organisations involved, as written ("Taiwo", "HR", "HSE Manager"). Not the user's own company, and not projects, products, forms or events.
+- impact_note: for above_beyond, a short reason using only stated facts; otherwise "".
+- blocker_detail: for blockers, what is blocked and who needs to act; otherwise "".
+- ai_confidence: 0–1, how sure you are of the KPI choice. Use below 0.6 when two KPIs fit equally or the notes are too vague to tell.`
+}
+
+async function organiseLog(raw: string, categories: Cat[], metrics: Met[], who?: Who) {
+  const out = await ask<{ entries: unknown[] }>(ENTRIES_SCHEMA, organisePrompt(raw, categories, metrics, who), 'low')
   return out.entries
 }
 
@@ -185,7 +200,7 @@ Deno.serve(async (req) => {
         return json({ result: await generateKpis(body.jd_text, String(body.job_title ?? '')) })
       case 'organise_log':
         if (typeof body.raw !== 'string' || body.raw.length > LIMITS.raw) return json({ error: 'Log text is missing or too long.' }, 400)
-        return json({ result: await organiseLog(body.raw, body.categories ?? [], body.metrics ?? []) })
+        return json({ result: await organiseLog(body.raw, body.categories ?? [], body.metrics ?? [], body.who ?? {}) })
       case 'polish_standup':
         return json({ result: await polishStandup(body.standup) })
       case 'polish_report':

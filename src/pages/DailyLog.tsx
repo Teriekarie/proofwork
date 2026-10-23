@@ -75,8 +75,20 @@ export default function DailyLog() {
       setDrafts((d) => [...(d ?? []), ...value])
       setAiSource(r.source)
       if (r.reason) toast(`Claude couldn't organise this (${r.reason}). Used the basic offline organiser instead.`, 'error')
-      if (!r.value.length) toast("Couldn't find any work items in that. Try one item per line.", 'info')
+      if (!r.value.length) { toast("Couldn't find any work items in that. Try one item per line.", 'info'); return }
+      // The text now lives in the review cards: clear the boxes, but keep a copy for the day's record (and for Discard).
+      setPending((p) => ({ raw: [p.raw, raw.trim()].filter(Boolean).join('\n'), blockers: [...p.blockers, ...blockerLines] }))
+      setRaw(''); setBlockers('')
     } finally { setBusy(false) }
+  }
+
+  // What was typed and organised but not yet saved.
+  const [pending, setPending] = useState<{ raw: string; blockers: string[] }>({ raw: '', blockers: [] })
+  const discardDrafts = () => {
+    // Put the typed text back so nothing is lost.
+    if (pending.raw) setRaw((r) => [pending.raw, r.trim()].filter(Boolean).join('\n'))
+    if (pending.blockers.length) setBlockers((b) => [pending.blockers.map((l) => `• ${l}`).join('\n'), b.trim()].filter(Boolean).join('\n'))
+    setPending({ raw: '', blockers: [] }); setDrafts(null); setAiSource(null)
   }
 
   const saveDrafts = async () => {
@@ -90,10 +102,10 @@ export default function DailyLog() {
         impact_note: d.impact_note, blocker_detail: d.blocker_detail, evidence_url: d.evidence_url ?? '', stakeholders: d.stakeholders,
         is_late: win === 'late', ai_confidence: d.ai_confidence,
       })))
-      const typed = [raw.trim(), blockerLines.length ? `Blockers:\n${blockerLines.map((l) => `• ${l}`).join('\n')}` : ''].filter(Boolean).join('\n\n')
+      const typed = [pending.raw, pending.blockers.length ? `Blockers:\n${pending.blockers.map((l) => `• ${l}`).join('\n')}` : ''].filter(Boolean).join('\n\n')
       if (typed) await data.saveDailyLog(date, { raw_input: [log?.raw_input, typed].filter(Boolean).join('\n\n') })
       toast(`Saved ${pluralize(valid.length, 'entry', 'entries')} to ${win === 'today' ? 'today' : prettyDate(date)}`)
-      setDrafts(null); setRaw(''); setBlockers(''); setAiSource(null)
+      setDrafts(null); setPending({ raw: '', blockers: [] }); setAiSource(null)
     } catch (e) { toast((e as Error).message, 'error') } finally { setSaving(false) }
   }
 
@@ -167,7 +179,7 @@ export default function DailyLog() {
           const off = !isWorkDay(d, workDays)
           const label = d === today ? 'Today' : d === shiftDays(today, -1) ? 'Yesterday' : prettyDate(d, 'EEEE')
           return (
-            <button key={d} onClick={() => { setParams(d === today ? {} : { date: d }); setDrafts(null) }}
+            <button key={d} onClick={() => { setParams(d === today ? {} : { date: d }); if (drafts) discardDrafts() }}
               className={cn('min-w-[104px] rounded-xl border px-4 py-2 text-left transition',
                 date === d ? 'border-teal-500 bg-teal-50 dark:bg-teal-500/10' : 'border-line bg-surface hover:border-teal-300', off && date !== d && 'opacity-60')}>
               <span className="block text-sm font-semibold">{label}</span>
@@ -239,12 +251,16 @@ export default function DailyLog() {
                         {d.raw_text && d.raw_text !== d.refined_text && <p className="mb-2 pr-8 text-xs text-muted">From: "{d.raw_text}"</p>}
                         <EntryEditor compact value={d} categories={categories} metrics={metrics}
                           onChange={(p) => setDrafts(drafts.map((x, j) => (j === i ? { ...x, ...p } : x)))} />
-                        {catById.get(d.category_id)?.is_extra && <p className="mt-2 text-xs text-muted">✦ Didn't match a KPI, so it's filed under Beyond Scope. Change the category if it fits one.</p>}
+                        {aiSource === 'claude' && d.ai_confidence < 0.6 ? (
+                          <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1 text-xs font-medium text-amber-800 dark:bg-amber-500/10 dark:text-amber-200">
+                            <AlertTriangle className="h-3.5 w-3.5" />Check the KPI: Claude wasn't sure where this belongs.
+                          </p>
+                        ) : catById.get(d.category_id)?.is_extra && <p className="mt-2 text-xs text-muted">✦ Didn't match a KPI, so it's filed under Beyond Scope. Change the category if it fits one.</p>}
                       </motion.div>
                     ))}
                   </div>
                   <div className="mt-4 flex justify-end gap-2">
-                    <Button variant="ghost" onClick={() => setDrafts(null)}>Discard</Button>
+                    <Button variant="ghost" onClick={discardDrafts} title="Throw away these drafts and put your text back in the box">Discard</Button>
                     <Button variant="accent" loading={saving} onClick={saveDrafts} icon={<Check className="h-4 w-4" />}>Save to log</Button>
                   </div>
                 </Card>

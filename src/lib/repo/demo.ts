@@ -230,7 +230,9 @@ export const demoData: DataRepo = {
   async updateEntry(id, patch) {
     const e = me().entries.find((x) => x.id === id)
     if (!e) throw new RepoError('Entry not found.')
-    assertWritable(e.entry_date)
+    // Re-filing (KPI / metric / quantity only) is allowed on locked days; anything else respects the logging window.
+    const refileOnly = Object.keys(patch).every((k) => ['category_id', 'metric_id', 'quantity'].includes(k))
+    if (!refileOnly) assertWritable(e.entry_date)
     Object.assign(e, patch, { id: e.id, user_id: e.user_id, entry_date: e.entry_date })
     return commit(e)
   },
